@@ -5,43 +5,18 @@ import pandas as pd
 # 获取上证A股实时行情数据
 stock_sh_a_spot_em_df = ak.stock_sh_a_spot_em()
 
-# 打印列名
-print(stock_sh_a_spot_em_df.columns)
-
-# 筛选换手率在1%到5%之间且最新价在10到60之间的股票
-low_turnover_stocks = stock_sh_a_spot_em_df[
-    (stock_sh_a_spot_em_df['换手率'] < 5) & 
-    (stock_sh_a_spot_em_df['换手率'] > 1) &
-    (stock_sh_a_spot_em_df['最新价'] > 10) &
-    (stock_sh_a_spot_em_df['最新价'] < 60) &
-    (stock_sh_a_spot_em_df['流通市值'] > 10000000000)  # 100亿元
-].copy()
-
-# 按换手率升序排序
-low_turnover_stocks = low_turnover_stocks.sort_values('换手率')
-
-# 显示结果，只展示关键信息
-result = low_turnover_stocks[['代码', '名称', '最新价', '换手率', '涨跌幅', '振幅', '总市值', '流通市值', '市盈率-动态', '市净率']]
-
-# 将市值从元转换为亿元
-result['总市值'] = result['总市值'] / 100000000
-result['流通市值'] = result['流通市值'] / 100000000
-
-print('\n换手率在1%到5%之间的股票：')
-print(f'共找到 {len(result)} 只股票\n')
-
-# def get_pe_stats(symbol):
-#     """获取指定股票的PE(TTM)值和分位数"""
-#     try:
-#         pe_data = ak.stock_value_em(symbol=symbol)
-#         if pe_data is None or len(pe_data) == 0:
-#             return None, None
-#         current_pe = pe_data.iloc[-1]['PE(TTM)']
-#         pe_percentile = stats.percentileofscore(pe_data['PE(TTM)'], current_pe)
-#         return current_pe, pe_percentile
-#     except Exception as e:
-#         print(f"获取{symbol}的PE数据时出错: {str(e)}")
-#         return None, None
+def get_pe_stats(symbol):
+    """获取指定股票的PE(TTM)值和分位数"""
+    try:
+        pe_data = ak.stock_value_em(symbol=symbol)
+        if pe_data is None or len(pe_data) == 0:
+            return None, None
+        current_pe = pe_data.iloc[-1]['PE(TTM)']
+        pe_percentile = stats.percentileofscore(pe_data['PE(TTM)'], current_pe)
+        return current_pe, pe_percentile
+    except Exception as e:
+        print(f"获取{symbol}的PE数据时出错: {str(e)}")
+        return None, None
 
 # # 为每只股票获取PE信息
 # results = []
@@ -68,9 +43,6 @@ print(f'共找到 {len(result)} 只股票\n')
 # formatted['总市值'] = formatted['总市值'].map('{:.2f}亿'.format)
 # formatted['流通市值'] = formatted['流通市值'].map('{:.2f}亿'.format)
 
-# print(formatted.to_string(index=False, justify='center'))
-stock_individual_info_em_df = ak.stock_individual_info_em(symbol="000001")
-print(stock_individual_info_em_df)
 
 # 筛选最近一个月的数据
 # last_month = pe_data[pe_data['数据日期'].dt.date >= (pd.to_datetime('today') - pd.Timedelta(days=30)).date()]

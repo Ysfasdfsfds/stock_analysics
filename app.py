@@ -126,16 +126,16 @@ if __name__ == '__main__':
     
     # 自动注册路由
     auto_register_routes(app)
-    
+    print(app.url_map)
     # 启动应用
     port = int(os.environ.get('PORT', 5001))
-    debug = os.environ.get('DEBUG', 'False').lower() == 'true'
+    print(port)
     
-    logger.info(f"启动Flask应用，端口: {port}, 调试模式: {debug}")
+    logger.info(f"启动Flask应用，端口: {port}, 调试模式: True")
     
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=debug,
-        threaded=True
+        debug=True,
+        threaded=True,
     )

@@ -5,6 +5,10 @@
 """
 
 from datetime import datetime
+import akshare as ak
+import json
+import pandas as pd
+
 from flask import Blueprint, jsonify, request
 from utils.response import success_response, error_response
 from utils.validators import validate_stock_symbol
@@ -304,6 +308,105 @@ def get_stock_type(code):
             return error_response(f'无法获取股票{code}的类型信息', 404)
         
         return success_response(type_info)
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+@bp.route('/stock/<code>/stock_value_em', methods=['GET'])
+def get_stock_value_em(code):
+    """
+    获取指定股票的估值分析信息
+
+    Args:
+        code (str): 股票代码
+
+    Returns:
+        {
+            "code": 200,
+            "message": "success",
+            "data": {...}
+        }
+    """
+    try:
+        info = ak.stock_value_em(symbol=code)
+        if info is None:
+            return error_response(f'无法获取股票{code}的估值分析信息', 404)
+        
+        # 转换日期格式
+        info['date'] = pd.to_datetime(info['数据日期']).dt.strftime('%Y-%m-%d')
+        # 转换为JSON字符串
+        info_json = json.loads(info.to_json(orient="records", force_ascii=False))
+        
+        return success_response(info_json)
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route('/stock/<code>/stock_individual_fund_flow', methods=['GET'])
+def stock_individual_fund_flow(code):
+    """
+    获取指定股票的资金流向  
+
+    Args:
+        code (str): 股票代码
+
+    Returns:
+        {
+            "code": 200,
+            "message": "success",
+            "data": {...}
+        }
+    """
+    try:
+        info = ak.stock_individual_fund_flow(stock=code)
+        if info is None:
+            return error_response(f'无法获取股票{code}的资金流向信息', 404)
+        
+        # 转换日期格式
+        info['date'] = pd.to_datetime(info['日期']).dt.strftime('%Y-%m-%d')
+        # 转换为JSON字符串
+        info_json = json.loads(info.to_json(orient="records", force_ascii=False))
+        
+        return success_response(info_json)
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+@bp.route('/stock/<code>/index_zh_a_hist', methods=['GET'])
+def index_zh_a_hist(code):
+    """
+    获取指定指数的历史数据
+
+    Args:
+        code (str): 指数代码
+
+    Returns:
+        {
+            "code": 200,
+            "message": "success",
+            "data": {...}
+        }
+    """
+    index_symbol = code
+    start_date = request.args.get('start_date', '20200101')
+    end_date = request.args.get('end_date', '20230101')
+    try:
+        info = ak.index_zh_a_hist(
+            symbol=index_symbol,
+            period="daily",
+            start_date=start_date,
+            end_date=end_date
+        )
+        if info is None:
+            return error_response(f'无法获取股票{code}的资金流向信息', 404)
+        
+        # 转换日期格式
+        info['date'] = pd.to_datetime(info['日期']).dt.strftime('%Y-%m-%d')
+        # 转换为JSON字符串
+        info_json = json.loads(info.to_json(orient="records", force_ascii=False))
+        
+        return success_response(info_json)
         
     except Exception as e:
         return error_response(str(e), 500)

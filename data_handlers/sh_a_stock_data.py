@@ -290,7 +290,7 @@ class SHAStockDataHandler:
             cached_stocks = self._load_from_cache(max_age_minutes=self.cache_max_age_minutes)
             if cached_stocks is not None and len(cached_stocks) > 0:
                 logger.info(f"使用缓存的股票数据（{self.cache_max_age_minutes}分钟内）")
-                return [stock for stock in cached_stocks if stock['code'].startswith('60') and stock['total_market_cap'] > 100]
+                return cached_stocks
             
             # 缓存中没有，从原始接口获取
             logger.info("缓存中没有有效数据，从原始接口获取")
@@ -336,11 +336,8 @@ class SHAStockDataHandler:
             
             self.cached_data = result
             self.last_update = datetime.now()
-
-            # 过滤出上证主板（以'60'开头）且总市值大于100亿的股票
-            stock60 = [stock for stock in result if stock['code'].startswith('60') and stock['total_market_cap'] > 100]
             
-            return stock60
+            return result
             
         except Exception as e:
             logger.error(f"获取上证A股实时行情数据失败: {str(e)}")
