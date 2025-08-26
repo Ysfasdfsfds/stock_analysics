@@ -5,6 +5,7 @@
 """
 
 import logging
+from re import S
 from typing import Dict, List, Optional
 import pandas as pd
 import akshare as ak
@@ -91,15 +92,34 @@ class SHAStockDataHandler:
                     )
                 ''')
                 
+                # 创建股票基本信息缓存表
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS stock_basic_info_cache (
+                        code TEXT PRIMARY KEY,
+                        name TEXT,
+                        industry TEXT,
+                        list_date TEXT,
+                        total_shares REAL,
+                        circulating_shares REAL,
+                        timestamp TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
                 # 创建索引以提高查询性能
                 cursor.execute('''
                     CREATE INDEX IF NOT EXISTS idx_code_timestamp 
                     ON stock_data_cache(code, timestamp)
                 ''')
-                
+
                 cursor.execute('''
                     CREATE INDEX IF NOT EXISTS idx_timestamp 
                     ON stock_data_cache(timestamp)
+                ''')
+
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_basic_code 
+                    ON stock_basic_info_cache(code)
                 ''')
                 
                 conn.commit()
@@ -109,12 +129,158 @@ class SHAStockDataHandler:
             logger.error(f"数据库初始化失败: {str(e)}")
             raise
     
+    def get_stock_type_info(self, stock_code: str) -> Optional[Dict]:
+        """
+        获取指定股票的基本信息，优先使用SQLite缓存
+        
+        Args:
+            stock_code: 股票代码
+            0    最新                6.56
+1  股票代码              000002
+2  股票简称               万  科Ａ
+3   总股本       11930709471.0
+4   流通股        9716399629.0
+5   总市值  78265454129.759995
+6  流通市值  63739581566.239998
+7    行业               房地产开发
+8  上市时间            19910129
+            
+        Returns:
+            股票基本信息，包含行业、股本等
+        """
+        try:
+            # 首先从缓存获取
+            cached_info = self._load_stock_basic_info_from_cache(stock_code)
+            if cached_info:
+                logger.info(f"从缓存获取股票{stock_code}基本信息")
+                return cached_info
+            
+            # 缓存中没有，从akshare获取
+            stock_info = ak.stock_individual_info_em(symbol=stock_code)
+            
+            if stock_info is None or stock_info.empty:
+                logger.warning(f"无法获取股票{stock_code}的基本信息")
+                return None
+            
+            # 创建字典映射，避免索引问题
+            info_dict = {}
+            for _, row in stock_info.iterrows():
+                item = str(row['item']).strip()
+                value = str(row['value']).strip()
+                info_dict[item] = value
+            
+            # 安全地提取数据
+            name = info_dict.get('股票简称', '')
+            industry = info_dict.get('行业', '')
+            list_date = info_dict.get('上市时间', '')
+            
+            # 安全地转换数值类型
+            try:
+                total_shares = float(info_dict.get('总股本', '0').replace(',', ''))
+            except (ValueError, AttributeError):
+                total_shares = 0.0
+            
+            try:
+                circulating_shares = float(info_dict.get('流通市值', '0').replace(',', ''))
+            except (ValueError, AttributeError):
+                circulating_shares = 0.0
+            
+            # 构建股票基本信息
+            type_info = {
+                'code': str(stock_code),
+                'name': name,
+                'industry': industry,
+                'list_date': list_date,
+                'total_shares': total_shares,
+                'circulating_shares': circulating_shares,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # 保存到缓存
+            self._save_stock_basic_info_to_cache(type_info)
+            
+            return type_info
+            
+        except Exception as e:
+            logger.error(f"获取股票{stock_code}基本信息失败: {str(e)}")
+            return None
+    
+    def get_stock_type_batch(self, stock_codes: List[str]) -> Optional[List[Dict]]:
+        """
+        批量获取股票类型信息
+        
+        Args:
+            stock_codes: 股票代码列表
+            
+        Returns:
+            股票类型信息列表
+        """
+        try:
+            result = []
+            for code in stock_codes:
+                type_info = self.get_stock_type_info(code)
+                if type_info:
+                    result.append(type_info)
+            
+            return result if result else None
+            
+        except Exception as e:
+            logger.error(f"批量获取股票类型信息失败: {str(e)}")
+            return None
+    
+    def get_all_industries(self) -> Optional[List[Dict]]:
+        """
+        获取所有上证A股行业分类（基于已有股票数据，避免重复API调用）
+        
+        Returns:
+            行业信息列表
+        """
+        try:
+            # 获取上证A股实时数据
+            stocks = self.get_realtime_sh_a_stocks()
+            if not stocks:
+                return None
+            
+            # 简单的行业分类（基于股票名称特征）
+            industries = {}
+            
+            for stock in stocks:
+                code = stock['code']
+                name = stock['name']
+                
+                # 根据股票名称判断行业
+                industry = "其他"
+                industry_info = self.get_stock_type_info(code)
+                if industry_info:
+                    industry = industry_info['industry']
+                
+                if industry not in industries:
+                    industries[industry] = {
+                        'industry': industry,
+                        'count': 0,
+                        'stocks': []
+                    }
+                
+                industries[industry]['count'] += 1
+                industries[industry]['stocks'].append(stock)
+          
+            # 按股票数量排序
+            result = list(industries.values())
+            result.sort(key=lambda x: x['count'], reverse=True)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取行业分类失败: {str(e)}")
+            return None
+    
     def get_realtime_sh_a_stocks(self) -> Optional[List[Dict]]:
         """
         获取上证A股实时行情数据，优先使用缓存
+        过滤条件：仅返回上证主板（代码以'60'开头）且总市值大于100亿的股票
         
         Returns:
-            上证A股实时行情数据列表
+            过滤后的上证A股实时行情数据列表
         """
         try:
             # 清理过期缓存
@@ -124,9 +290,7 @@ class SHAStockDataHandler:
             cached_stocks = self._load_from_cache(max_age_minutes=self.cache_max_age_minutes)
             if cached_stocks is not None and len(cached_stocks) > 0:
                 logger.info(f"使用缓存的股票数据（{self.cache_max_age_minutes}分钟内）")
-                return cached_stocks
-                self.last_update = datetime.now()
-                return cached_stocks
+                return [stock for stock in cached_stocks if stock['code'].startswith('60') and stock['total_market_cap'] > 100]
             
             # 缓存中没有，从原始接口获取
             logger.info("缓存中没有有效数据，从原始接口获取")
@@ -172,8 +336,11 @@ class SHAStockDataHandler:
             
             self.cached_data = result
             self.last_update = datetime.now()
+
+            # 过滤出上证主板（以'60'开头）且总市值大于100亿的股票
+            stock60 = [stock for stock in result if stock['code'].startswith('60') and stock['total_market_cap'] > 100]
             
-            return result
+            return stock60
             
         except Exception as e:
             logger.error(f"获取上证A股实时行情数据失败: {str(e)}")
@@ -339,8 +506,16 @@ class SHAStockDataHandler:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
+                
+                # 清理股票行情缓存
                 cursor.execute('''
                     DELETE FROM stock_data_cache
+                    WHERE created_at < datetime('now', '-{} hours')
+                '''.format(max_age_hours))
+                
+                # 清理股票基本信息缓存
+                cursor.execute('''
+                    DELETE FROM stock_basic_info_cache
                     WHERE created_at < datetime('now', '-{} hours')
                 '''.format(max_age_hours))
                 
@@ -352,6 +527,79 @@ class SHAStockDataHandler:
                     
         except Exception as e:
             logger.error(f"清理缓存失败: {str(e)}")
+
+    def _load_stock_basic_info_from_cache(self, stock_code: str) -> Optional[Dict]:
+        """
+        从缓存加载股票基本信息
+        
+        Args:
+            stock_code: 股票代码
+            
+        Returns:
+            股票基本信息或None
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT code, name, industry, list_date, 
+                           total_shares, circulating_shares, timestamp
+                    FROM stock_basic_info_cache
+                    WHERE code = ?
+                ''', (stock_code,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'code': row[0],
+                        'name': row[1],
+                        'industry': row[2],
+                        'list_date': row[3],
+                        'total_shares': row[4],
+                        'circulating_shares': row[5],
+                        'timestamp': row[6]
+                    }
+                
+                return None
+                
+        except Exception as e:
+            logger.error(f"从缓存加载股票{stock_code}基本信息失败: {str(e)}")
+            return None
+
+    def _save_stock_basic_info_to_cache(self, stock_info: Dict) -> bool:
+        """
+        将股票基本信息保存到缓存
+        
+        Args:
+            stock_info: 股票基本信息字典
+            
+        Returns:
+            是否保存成功
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO stock_basic_info_cache 
+                    (code, name, industry, list_date, total_shares, 
+                     circulating_shares, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    stock_info['code'],
+                    stock_info['name'],
+                    stock_info['industry'],
+                    stock_info['list_date'],
+                    stock_info['total_shares'],
+                    stock_info['circulating_shares'],
+                    stock_info['timestamp']
+                ))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"保存股票基本信息到缓存失败: {str(e)}")
+            return False
     
     def refresh_cache(self) -> bool:
         """
@@ -536,3 +784,29 @@ def get_sh_a_stock_by_code(code: str) -> Optional[Dict]:
 def get_sh_a_market_summary() -> Optional[Dict]:
     """获取上证A股市场概览的便捷函数"""
     return sh_a_stock_handler.get_market_summary()
+
+def get_stock_type_info(code: str) -> Optional[Dict]:
+    """获取股票类型信息的便捷函数"""
+    return sh_a_stock_handler.get_stock_type_info(code)
+
+def get_stock_type_batch(codes: List[str]) -> Optional[List[Dict]]:
+    """批量获取股票类型信息的便捷函数"""
+    return sh_a_stock_handler.get_stock_type_batch(codes)
+
+def get_all_industries() -> Optional[List[Dict]]:
+    """获取所有上证A股行业分类的便捷函数"""
+    return sh_a_stock_handler.get_all_industries()
+
+
+
+if __name__ == "__main__":
+    # 测试获取所有股票类型
+    # all_stocks = get_sh_a_realtime_stocks()
+    # if all_stocks:
+    #     print("所有股票:")
+    #     for stock in all_stocks:
+    #         stock_base_info = get_stock_type_info(stock['code'])
+    #         print(stock_base_info)
+    # else:
+    #     print("获取股票失败")
+    pass

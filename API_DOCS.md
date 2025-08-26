@@ -212,7 +212,126 @@
 }
 ```
 
+### 7. 获取股票类型信息
+
+获取指定上证股票的类型信息，包括行业、板块等详细信息。
+
+**Endpoint**: `GET /api/sh-a/stock/<code>/type`
+
+**Path Parameters**:
+- `code` (str): 股票代码，例如：600000
+
+**Response Example**:
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "code": "600000",
+    "name": "浦发银行",
+    "industry": "银行",
+    "sector": "股份制银行",
+    "board": "上证主板",
+    "market": "上证A股",
+    "list_date": "1999-11-10",
+    "total_shares": 2935208.04,
+    "circulating_shares": 2935208.04,
+    "timestamp": "2024-01-01T12:00:00"
+  }
+}
+```
+
+### 8. 批量获取股票类型信息
+
+批量获取多个股票的类型信息。
+
+**Endpoint**: `POST /api/sh-a/stock/types/batch`
+
+**Request Body**:
+```json
+{
+  "codes": ["600000", "600001", "688001"]
+}
+```
+
+**Response Example**:
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "total": 3,
+    "types": [
+      {
+        "code": "600000",
+        "name": "浦发银行",
+        "industry": "银行",
+        "board": "上证主板"
+      },
+      {
+        "code": "600001",
+        "name": "邯郸钢铁",
+        "industry": "钢铁",
+        "board": "上证主板"
+      },
+      {
+        "code": "688001",
+        "name": "华兴源创",
+        "industry": "专用设备",
+        "board": "科创板"
+      }
+    ]
+  }
+}
+```
+
+### 9. 获取行业分类
+
+获取所有上证A股的行业分类信息，基于股票名称特征进行智能分类，避免重复API调用。
+
+**Endpoint**: `GET /api/sh-a/industries`
+
+**Response Example**:
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "total": 25,
+    "industries": [
+      {
+        "industry": "银行",
+        "count": 32,
+        "stocks": [
+          {"code": "600000", "name": "浦发银行"},
+          {"code": "600015", "name": "华夏银行"}
+        ]
+      },
+      {
+        "industry": "医药",
+        "count": 45,
+        "stocks": [
+          {"code": "600276", "name": "恒瑞医药"},
+          {"code": "600196", "name": "复星医药"}
+        ]
+      },
+      {
+        "industry": "其他",
+        "count": 120,
+        "stocks": [
+          {"code": "600519", "name": "贵州茅台"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+**注意**: 行业分类基于股票名称特征进行智能识别，主要行业包括：银行、保险、证券、医药、房地产、汽车、钢铁、电力、石油、化工、机械、电子、通信、计算机、食品饮料、纺织服装、家电、建材、交通运输、农林牧渔、传媒、环保、有色金属、煤炭等。无法识别的股票将归类为"其他"。
+
 ## 字段说明
+
+### 股票行情字段
 
 | 字段名 | 类型 | 说明 | 单位 |
 |--------|------|------|------|
@@ -239,6 +358,18 @@
 | change_60day | float | 60日涨跌幅 | % |
 | change_ytd | float | 年初至今涨跌幅 | % |
 | timestamp | string | 数据时间 | ISO 8601 |
+
+### 股票类型字段
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| industry | string | 行业分类 | "银行" |
+| sector | string | 细分行业 | "股份制银行" |
+| board | string | 所属板块 | "上证主板" / "科创板" |
+| market | string | 所属市场 | "上证A股" |
+| list_date | string | 上市日期 | "1999-11-10" |
+| total_shares | float | 总股本 | 万股 |
+| circulating_shares | float | 流通股本 | 万股 |
 
 ## 错误码说明
 
@@ -279,6 +410,23 @@ curl "http://localhost:5000/api/sh-a/hot-stocks?count=20"
 ### 获取低换手率优质股票
 ```bash
 curl "http://localhost:5000/api/sh-a/low-turnover-stocks?count=50"
+```
+
+### 获取股票类型信息
+```bash
+curl http://localhost:5000/api/sh-a/stock/600000/type
+```
+
+### 批量获取股票类型信息
+```bash
+curl -X POST http://localhost:5000/api/sh-a/stock/types/batch \
+  -H "Content-Type: application/json" \
+  -d '{"codes": ["600000", "600001", "688001"]}'
+```
+
+### 获取行业分类
+```bash
+curl http://localhost:5000/api/sh-a/industries
 ```
 
 ## 注意事项

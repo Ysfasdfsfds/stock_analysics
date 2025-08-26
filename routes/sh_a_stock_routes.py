@@ -12,7 +12,10 @@ from data_handlers.sh_a_stock_data import (
     get_sh_a_realtime_stocks,
     filter_sh_a_stocks,
     get_sh_a_stock_by_code,
-    get_sh_a_market_summary
+    get_sh_a_market_summary,
+    get_stock_type_info,
+    get_stock_type_batch,
+    get_all_industries
 )
 
 # 创建蓝图
@@ -278,3 +281,98 @@ def get_low_turnover_stocks():
         
     except Exception as e:
         return error_response(f'获取低换手率股票失败: {str(e)}', 500)
+
+@bp.route('/stock/<code>/type', methods=['GET'])
+def get_stock_type(code):
+    """
+    获取指定股票的类型信息
+
+    Args:
+        code (str): 股票代码
+
+    Returns:
+        {
+            "code": 200,
+            "message": "success",
+            "data": {...}
+        }
+    """
+    try:
+        type_info = get_stock_type_info(code)
+        print(type_info)
+        if type_info is None:
+            return error_response(f'无法获取股票{code}的类型信息', 404)
+        
+        return success_response(type_info)
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+@bp.route('/stock/types/batch', methods=['POST'])
+def get_stock_types_batch():
+    """
+    批量获取股票类型信息
+
+    POST Body:
+        {
+            "codes": ["600000", "600001", ...]
+        }
+
+    Returns:
+        {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "total": 3,
+                "types": [...]
+            }
+        }
+    """
+    try:
+        data = request.get_json()
+        if not data or 'codes' not in data:
+            return error_response('请提供股票代码列表', 400)
+        
+        codes = data['codes']
+        if not isinstance(codes, list):
+            return error_response('codes必须是列表格式', 400)
+        
+        type_info_list = get_stock_type_batch(codes)
+        if type_info_list is None:
+            return error_response('获取股票类型信息失败', 500)
+        
+        return success_response({
+            'total': len(type_info_list),
+            'types': type_info_list
+        })
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+@bp.route('/industries', methods=['GET'])
+def get_industries():
+    """
+    获取所有上证A股行业分类
+
+    Returns:
+        {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "total": 50,
+                "industries": [...]
+            }
+        }
+    """
+    try:
+        industries = get_all_industries()
+        if industries is None:
+            return error_response('获取行业分类失败', 500)
+        
+        return success_response({
+            'total': len(industries),
+            'industries': industries
+        })
+        
+    except Exception as e:
+        return error_response(str(e), 500)
