@@ -8,7 +8,7 @@ import os
 import sys
 import importlib.util
 from pathlib import Path
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
 import logging
 
@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 # 创建Flask应用
 def create_app():
     """创建并配置Flask应用"""
-    app = Flask(__name__)
+    app = Flask(__name__, 
+                static_folder='static', 
+                template_folder='templates')
     
     # 启用CORS
     CORS(app)
@@ -33,31 +35,44 @@ def create_app():
     
     return app
 
-# 初始化应用
-app = create_app()
+def register_base_routes(app):
+    """注册基础路由"""
+    
+    # 健康检查接口
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        """健康检查接口"""
+        return jsonify({
+            'status': 'healthy',
+            'message': '股票数据服务运行正常',
+            'version': '1.0.0'
+        })
 
-# 健康检查接口
-@app.route('/health', methods=['GET'])
-def health_check():
-    """健康检查接口"""
-    return jsonify({
-        'status': 'healthy',
-        'message': '股票数据服务运行正常',
-        'version': '1.0.0'
-    })
+    # 前端应用路由
+    @app.route('/')
+    def index():
+        """提供前端应用主页"""
+        return render_template('index.html')
 
-# 根路径接口
-@app.route('/', methods=['GET'])
-def index():
-    """根路径接口"""
-    return jsonify({
-        'message': '欢迎使用股票数据服务',
-        'endpoints': {
-            'health': '/health',
-            'api': '/api/*',
-            'docs': '访问 /apidocs 查看API文档'
-        }
-    })
+    # 静态资源路由  
+    @app.route('/assets/<path:filename>')
+    def assets(filename):
+        """提供静态资源文件"""
+        return send_from_directory('static/assets', filename)
+
+    @app.route('/favicon.ico')
+    def favicon():
+        """提供favicon"""
+        return send_from_directory('static', 'favicon.ico')
+
+    # 所有前端路由都返回index.html（SPA模式）
+    @app.route('/<path:path>')
+    def spa_routes(path):
+        """处理Vue Router的路由，返回index.html"""
+        # 如果请求的是API路径，不处理
+        if path.startswith('api/') or path.startswith('health'):
+            return jsonify({'error': 'API endpoint not found'}), 404
+        return render_template('index.html')
 
 def auto_register_routes(app):
     """
@@ -121,6 +136,12 @@ def auto_import_data_handlers():
             logger.error(f"导入数据处理器 {handler_file.stem} 失败: {str(e)}")
 
 if __name__ == '__main__':
+    # 创建Flask应用
+    app = create_app()
+    
+    # 注册基础路由
+    register_base_routes(app)
+    
     # 自动导入数据处理器
     auto_import_data_handlers()
     

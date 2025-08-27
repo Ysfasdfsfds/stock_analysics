@@ -388,23 +388,50 @@ def index_zh_a_hist(code):
             "data": {...}
         }
     """
-    index_symbol = code
-    start_date = request.args.get('start_date', '20200101')
-    end_date = request.args.get('end_date', '20230101')
+    start_date = request.args.get('start_date', '2020-01-01')
+    end_date = request.args.get('end_date', '2023-01-01')
     try:
-        info = ak.index_zh_a_hist(
-            symbol=index_symbol,
-            period="daily",
-            start_date=start_date,
-            end_date=end_date
-        )
-        if info is None:
-            return error_response(f'无法获取股票{code}的资金流向信息', 404)
+        # 使用更稳定的API获取上证指数数据
+        info = ak.stock_zh_index_daily_em(symbol='sh000001')
+        if info is None or info.empty:
+            return error_response(f'无法获取指数{code}的历史数据', 404)
         
-        # 转换日期格式
-        info['date'] = pd.to_datetime(info['日期']).dt.strftime('%Y-%m-%d')
-        # 转换为JSON字符串
-        info_json = json.loads(info.to_json(orient="records", force_ascii=False))
+        # 筛选指定日期范围
+        info['date'] = pd.to_datetime(info['date'])
+        start = pd.to_datetime(start_date)
+        end = pd.to_datetime(end_date)
+        info = info[(info['date'] >= start) & (info['date'] <= end)]
+        
+        if info.empty:
+            return error_response(f'在指定时间范围内未找到数据', 404)
+        
+        # 转换字段名为前端期望的格式
+        info = info.copy()
+        info['日期'] = info['date'].dt.strftime('%Y-%m-%d')
+        info['date'] = info['日期']  # 保留date字段供前端使用
+        info['开盘'] = info['open']
+        info['收盘'] = info['close']
+        info['最高'] = info['high']
+        info['最低'] = info['low']
+        info['成交量'] = info['volume']
+        info['成交额'] = info['amount']
+        
+        # 计算衍生指标
+        info['涨跌额'] = info['收盘'].diff()  # 今日收盘 - 昨日收盘
+        info['涨跌幅'] = (info['收盘'].pct_change() * 100).round(2)  # 涨跌幅百分比
+        info['振幅'] = ((info['最高'] - info['最低']) / info['收盘'].shift(1) * 100).round(2)  # 振幅百分比
+        info['换手率'] = 0.0  # 大盘指数换手率设为0
+        
+        # 填充NaN值
+        info = info.fillna(0)
+        
+        # 选择返回字段
+        result_columns = ['日期', 'date', '开盘', '收盘', '最高', '最低', '成交量', '成交额', 
+                         '涨跌额', '涨跌幅', '振幅', '换手率']
+        info_result = info[result_columns]
+        
+        # 转换为JSON格式
+        info_json = json.loads(info_result.to_json(orient="records", force_ascii=False))
         
         return success_response(info_json)
         
