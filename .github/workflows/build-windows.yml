@@ -31,6 +31,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        # 先安装基础科学计算库（避免依赖冲突）
+        pip install wheel setuptools
+        pip install numpy==1.24.3
+        pip install pandas==2.1.1
+        # 安装其他依赖
         pip install -r requirements.txt
         pip install pyinstaller
         
@@ -46,7 +51,16 @@ jobs:
     - name: Build executable
       run: |
         echo "开始构建Windows可执行文件..."
-        pyinstaller --clean stock_analyzer.spec
+        echo "Python版本信息:"
+        python --version
+        echo "当前工作目录:"
+        pwd
+        echo "检查spec文件:"
+        type stock_analyzer.spec
+        echo "检查launcher.py:"
+        type launcher.py
+        echo "开始PyInstaller构建..."
+        pyinstaller --clean --log-level=DEBUG stock_analyzer.spec
         
     - name: Check build output
       run: |

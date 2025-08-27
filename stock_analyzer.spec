@@ -22,21 +22,19 @@ datas = [
     (str(project_root / 'config.py'), '.'),
 ]
 
-# 添加akshare数据文件（尝试查找常见路径）
+# 添加akshare数据文件（安全的跨平台方式）
 try:
     import akshare
     akshare_path = Path(akshare.__file__).parent
-    calendar_file = akshare_path / 'file_fold' / 'calendar.json'
-    if calendar_file.exists():
-        datas.append((str(calendar_file), 'akshare/file_fold'))
-    
-    # 添加整个akshare数据目录（如果存在）
     file_fold_dir = akshare_path / 'file_fold'
     if file_fold_dir.exists():
-        datas.append((str(file_fold_dir), 'akshare/file_fold'))
+        # 使用相对路径，避免Windows路径问题
+        datas.append((str(file_fold_dir), os.path.join('akshare', 'file_fold')))
+        print(f"Added akshare data directory: {file_fold_dir}")
+except ImportError:
+    print("Warning: akshare not found, skipping data files")
 except Exception as e:
     print(f"Warning: Could not locate akshare data files: {e}")
-    pass
 
 # 隐式导入 - 确保所有必要模块被包含
 hiddenimports = [
@@ -132,6 +130,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(project_root / 'static' / 'favicon.ico'),  # 使用项目图标
+    icon=None,  # 暂时移除图标以避免路径问题
     version_file=None,
 )
